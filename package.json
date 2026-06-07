@@ -1,0 +1,14 @@
+{
+  "name": "blue-green-demo",
+  "version": "1.0.0",
+  "description": "Node.js App for ECS Blue Green Deployment",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "author": "Giri",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}
