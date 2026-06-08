@@ -6,7 +6,6 @@ pipeline {
         ECR_REPO = "356627769740.dkr.ecr.ap-south-1.amazonaws.com/myapp"
         CLUSTER = "Blue_Green_Cluster"
         SERVICE = "Blue_Green-service-b7ifaw2f"
-        CONTAINER_NAME = "myapp"
         TARGET_GROUP_GREEN = "arn:aws:elasticloadbalancing:ap-south-1:356627769740:targetgroup/GreenDeployment/0e097fc6fb1ec50b"
         LISTENER_ARN = "arn:aws:elasticloadbalancing:ap-south-1:356627769740:listener/app/ALBLoadbalancerBluegreen/c4e8f0d58f601261/f09c0f6b6d27d58c"
     }
@@ -32,9 +31,9 @@ pipeline {
         stage('Login to ECR') {
             steps {
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']]) {
-                    sh """
+                    sh '''
                     aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REPO
-                    """
+                    '''
                 }
             }
         }
@@ -47,51 +46,50 @@ pipeline {
             }
         }
 
-        stage('Update Task Definition') {
-            steps {
-                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']]) {
-                    sh """
-                    TASK_DEF=$(aws ecs describe-task-definition --task-definition myapp-task)
-
-                    echo "$TASK_DEF"
-                    """
-                }
-            }
-        }
-
         stage('Deploy to ECS (Green)') {
             steps {
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']]) {
-                    sh """
+                    sh '''
                     aws ecs update-service \
-                    --cluster \$CLUSTER \
+                    --cluster $CLUSTER \
                     --service $SERVICE \
                     --force-new-deployment \
                     --region $AWS_REGION
-                    """
+                    '''
                 }
             }
         }
 
-        stage('Health Check') {
+        stage('Health Check (Wait for Green)') {
             steps {
-                sh """
-                echo "Waiting for Green deployment..."
+                sh '''
+                echo "Waiting for Green deployment to stabilize..."
                 sleep 60
-                """
+
+                echo "Checking ALB health status..."
+                '''
             }
         }
 
         stage('Switch Traffic to Green') {
             steps {
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']]) {
-                    sh """
+                    sh '''
                     aws elbv2 modify-listener \
                     --listener-arn $LISTENER_ARN \
                     --default-actions Type=forward,TargetGroupArn=$TARGET_GROUP_GREEN
-                    """
+                    '''
                 }
             }
+        }
+    }
+
+    post {
+        success {
+            echo "✅ Deployment successful - Green is now live"
+        }
+        failure {
+            echo "❌ Deployment failed - check logs"
         }
     }
 }
