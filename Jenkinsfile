@@ -64,7 +64,7 @@ pipeline {
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']]) {
                     sh """
                     aws ecs update-service \
-                    --cluster $CLUSTER \
+                    --cluster \$CLUSTER \
                     --service $SERVICE \
                     --force-new-deployment \
                     --region $AWS_REGION
