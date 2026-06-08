@@ -47,7 +47,19 @@ pipeline {
             }
         }
 
-        stage('Update ECS Task Definition (Green)') {
+        stage('Update Task Definition') {
+            steps {
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']]) {
+                    sh """
+                    TASK_DEF=$(aws ecs describe-task-definition --task-definition myapp-task)
+
+                    echo "$TASK_DEF"
+                    """
+                }
+            }
+        }
+
+        stage('Deploy to ECS (Green)') {
             steps {
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']]) {
                     sh """
@@ -64,7 +76,7 @@ pipeline {
         stage('Health Check') {
             steps {
                 sh """
-                echo "Waiting for Green deployment to become healthy..."
+                echo "Waiting for Green deployment..."
                 sleep 60
                 """
             }
@@ -80,15 +92,6 @@ pipeline {
                     """
                 }
             }
-        }
-    }
-
-    post {
-        success {
-            echo "Deployment successful - Green is live"
-        }
-        failure {
-            echo "Deployment failed - rollback required"
         }
     }
 }
