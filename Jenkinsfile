@@ -7,6 +7,7 @@ pipeline {
         SERVICE = "Blue_Green-service-b7ifaw2f"
         TARGET_GROUP_GREEN = "arn:aws:elasticloadbalancing:ap-south-1:356627769740:targetgroup/BlueDeployment/6931a5cf0af3eaec"
         LISTENER_ARN = "arn:aws:elasticloadbalancing:ap-south-1:356627769740:listener/app/ALBLoadbalancerBluegreen/c4e8f0d58f601261/f09c0f6b6d27d58c"
+        ALB_DNS = "ALBLoadbalancerBluegreen-963860051.ap-south-1.elb.amazonaws.com"
     }
     stages {
         stage('Checkout') {
@@ -56,7 +57,6 @@ pipeline {
                     secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
                 )]) {
                     sh """
-                    # Get current task definition ARN
                     TASK_DEF=\$(aws ecs describe-services \
                       --cluster ${CLUSTER} \
                       --services ${SERVICE} \
@@ -66,26 +66,22 @@ pipeline {
 
                     echo "Current task def: \$TASK_DEF"
 
-                    # Export task definition JSON
                     aws ecs describe-task-definition \
                       --task-definition \$TASK_DEF \
                       --region ${AWS_REGION} \
                       --query 'taskDefinition' > /tmp/taskdef.json
 
-                    # Update image and remove read-only fields using python3
                     python3 << 'PYEOF'
 import json
 
 with open('/tmp/taskdef.json') as f:
     d = json.load(f)
 
-# Update image tag
 for c in d.get('containerDefinitions', []):
     if '${ECR_REPO}' in c.get('image', ''):
         c['image'] = '${ECR_REPO}:${BUILD_NUMBER}'
         print(f"Updated image to: {c['image']}")
 
-# Remove read-only fields
 for k in ['taskDefinitionArn','revision','status','requiresAttributes','compatibilities','registeredAt','registeredBy']:
     d.pop(k, None)
 
@@ -95,7 +91,6 @@ with open('/tmp/taskdef_new.json', 'w') as f:
 print("Task definition updated successfully")
 PYEOF
 
-                    # Register new task definition revision
                     NEW_TASK_DEF=\$(aws ecs register-task-definition \
                       --region ${AWS_REGION} \
                       --cli-input-json file:///tmp/taskdef_new.json \
@@ -104,7 +99,6 @@ PYEOF
 
                     echo "New task def: \$NEW_TASK_DEF"
 
-                    # Update ECS service with new task definition
                     aws ecs update-service \
                       --cluster ${CLUSTER} \
                       --service ${SERVICE} \
@@ -137,6 +131,23 @@ PYEOF
                         --region ${AWS_REGION}
                     """
                 }
+            }
+        }
+        stage('Deployment Info') {
+            steps {
+                sh """
+                echo "============================================"
+                echo "  DEPLOYMENT SUCCESSFUL"
+                echo "============================================"
+                echo "  Build Number : ${BUILD_NUMBER}"
+                echo "  Image        : ${ECR_REPO}:${BUILD_NUMBER}"
+                echo "  Cluster      : ${CLUSTER}"
+                echo "  Service      : ${SERVICE}"
+                echo "--------------------------------------------"
+                echo "  ACCESS YOUR APP:"
+                echo "  http://${ALB_DNS}:3000"
+                echo "============================================"
+                """
             }
         }
     }
